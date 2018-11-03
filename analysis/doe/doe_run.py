@@ -24,7 +24,7 @@ launchrailLength = 8.0 #m
 # x, vx, y, vy
 y0 = [0., 0., 0.1, 0.]
 
-rocketFilePath = "2019_rocket.csv"
+rocketFilePath = "2019_rocket_doe.csv"
 myRocket = Rocket(rocketFilePath)
 
 motorFilePath = "Cesaroni_N5800.eng"
@@ -35,10 +35,9 @@ solver = TwoDTrajectorySolver(
     dragModel=DragModel.CoefficientsBox
 )
 
-
-parameterKeys = ['finSpan', 'finTipChord', 'finRootChord', 'finSweepLength']
+parameterKeys = ['finRootChord', 'finTipChord', 'finSpan', 'finSweepLength']
 baselineParameters = {}
-doe_coeff = np.loadtxt('analysis/lhc_n4_200samples_random.csv')
+doe_coeff = np.loadtxt('analysis/doe/lhc_n4_100samples.csv')
 apogeeList = []
 stabilityList = []
 
@@ -57,12 +56,8 @@ for row in doe_coeff:
     apogeeList.append(solver.apogee)
     stabilityList.append(myRocket.staticStability)
 
-    # set back to baseline
-    for i in range(len(parameterKeys)):
-        myRocket.geometry[parameterKeys[i]] = baselineParameters[parameterKeys[i]]
-
     counter += 1
     print("... Iteration {}/{}. Apogee {:.0f}m Stability {:.2f}".format(counter, len(doe_coeff), solver.apogee, myRocket.staticStability))
 
-np.savetxt('analysis/apogee_list.csv', apogeeList)
-np.savetxt('analysis/stability_list.csv', stabilityList)
+np.savetxt('analysis/doe/apogee_list_lhs100_pred.csv', apogeeList)
+np.savetxt('analysis/doe/stability_list_lhs100_pred.csv', stabilityList)

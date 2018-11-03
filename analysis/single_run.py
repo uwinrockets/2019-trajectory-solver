@@ -24,7 +24,7 @@ launchrailLength = 8.0 #m
 # x, vx, y, vy
 y0 = [0., 0., 0.1, 0.]
 
-rocketFilePath = "2019_rocket.csv"
+rocketFilePath = "2019_rocket_harmonized.csv"
 myRocket = Rocket(rocketFilePath)
 
 motorFilePath = "Cesaroni_N5800.eng"
@@ -36,8 +36,8 @@ solver = TwoDTrajectorySolver(
 )
 
 solver.solve()
-print("Static Stability: {:.2f}".format(myRocket.staticStability))
 solver.post_process()
+print("Static Stability: {:.2f}".format(solver.rocket.staticStability))
 solver.printPostProcess()
 
 plt.plot(solver.t, solver.y, label="apogee")

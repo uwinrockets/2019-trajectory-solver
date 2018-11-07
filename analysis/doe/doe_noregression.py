@@ -51,6 +51,7 @@ parameterKeys = ['finRootChord', 'finTipChord', 'finSpan', 'finSweepLength']
 baselineParameters = {}
 for key in parameterKeys:
     baselineParameters[key] = myRocket.geometry[key]
+print(baselineParameters)
 
 doe_coeff = np.loadtxt('analysis/doe/lhc_n4_1000samples.csv')
 y_apogee = np.loadtxt('analysis/doe/apogee_list_lhs1000.csv')
@@ -126,13 +127,21 @@ def calculateDesirability (response, d_list, importance):
 
 
 # Optimization #######################################
-def optimizeWrapper(x, d_list):
+def optimizeWrapper(x, parameterKeys, d_list):
     reg_coeff = getRegressionXs(np.array([x]))
     apogee_response = apogeeReg.predict(reg_coeff)
-    stability_response = stabilityReg.predict(reg_coeff)
+    # stability_response = stabilityReg.predict(reg_coeff)
+
+    # change from baseline
+    for (key, coeff) in zip(parameterKeys, x):
+        myRocket.geometry[key] = baselineParameters[key] * coeff
+    myRocket.updateGeometry()
+    stability_response = myRocket.staticStability
+    f = 1 - calculateDesirability([apogee_response, stability_response], d_list, [1, 1])
+    # print("f: {} x: {} apogee: {} stability: {}".format(f, x, apogee_response, stability_response))
     
-    return 1 - calculateDesirability([apogee_response, stability_response], d_list, [1, 1])
-    
+    return f
+
 x0 = (
     0,
     0,
@@ -157,7 +166,7 @@ class MyBounds(object):
         test1 = x[0] > x[1] # root > tip
         test2 = x[0] > x[2] # root > span
         test3 = 1.2217304764 > math.atan(x[3]/x[2]) # sweep angle under 70deg
-        return tmax and tmin and test1 and test2 and test3
+        return (tmax and tmin) and (test1 and test2 and test3)
         
 def print_fun(x, f, accepted):
     if f < 1. and accepted:
@@ -167,13 +176,13 @@ def print_fun(x, f, accepted):
 d_apogee = DesirabilityFunction(9100, 1, lowerLimit=5000)
 d_stability = DesirabilityFunction(2.5, 1, lowerLimit=0, upperLimit=5)
 
-func = lambda x: optimizeWrapper(x, [d_apogee, d_stability])
+func = lambda x: optimizeWrapper(x, parameterKeys, [d_apogee, d_stability])
 minimizer_kwargs = {"method": "BFGS"}
 # minimizer_kwargs = {"method": "Nelder-Mead"}
 mybounds = MyBounds()
 # myAttemps = Attemps()
 ret = optimize.basinhopping(func, x0, minimizer_kwargs=minimizer_kwargs,
-                   niter=100, stepsize=0.05, accept_test=mybounds, callback=print_fun, disp=True)
+                   niter=5000, stepsize=0.05, accept_test=mybounds, callback=None, disp=True)
 
 print(ret)
 print("global minimum: x = {}, f(x0) = {:.2f}" .format(ret.x, ret.fun))

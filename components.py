@@ -91,7 +91,7 @@ class Rocket:
       elif self.angle_units == "radians":
           self.conversionFactorAngle = 1
 
-      lengthKeys = [
+      self.lengthKeys = [
         "nose_diameter", "nose_length",
         "body_diameter", "body_length",
         "boattail_length", "boattail_diameter",
@@ -100,26 +100,26 @@ class Rocket:
         "finSpan", "finSweepLength", "finConnection"
       ]
       
-      massKeys = [
+      self.massKeys = [
         "motorless_mass"
       ]
 
-      angleKeys = [
+      self.angleKeys = [
         "finLESweep", "finLETotal"
       ]
 
       # This will convert everything into SI units
-      for key in lengthKeys:
+      for key in self.lengthKeys:
         if key in self.geometry:
           self.geometry[key] = float(self.geometry[key]) * self.conversionFactorLength
       self.length_units = "m"
       
-      for key in massKeys:
+      for key in self.massKeys:
         if key in self.geometry:
           self.geometry[key] = float(self.geometry[key]) * self.conversionFactorMass
       self.mass_units = "kg"
       
-      for key in angleKeys:
+      for key in self.angleKeys:
         if key in self.geometry:
           self.geometry[key] = float(self.geometry[key]) * self.conversionFactorAngle
       self.angle_units = "radians"
@@ -131,7 +131,7 @@ class Rocket:
 
       self.geometry["referenceArea"] = math.pi / 4. * math.pow(self.geometry["body_diameter"], 2.)
       
-      self.geometry["taper"] = self.geometry["finTipChord"] / self.geometry["finRootChord"]
+      # self.geometry["taper"] = self.geometry["finTipChord"] / self.geometry["finRootChord"]
       
       #self.geometry["meanAeroChord"] = (2./3.) * self.geometry["finRootChord"] \
       #  * (1 + self.geometry["taper"] + self.geometry["taper"]**2) / (1 + self.geometry["taper"])
@@ -147,7 +147,10 @@ class Rocket:
       if "finConnection" not in self.geometry:
         self.geometry["finConnection"] = self.geometry["nose_length"] + self.geometry["body_length"] - self.geometry["finRootChord"]
 	  
-      self.geometry["finLESweep"] = math.atan(self.geometry["finSweepLength"]/self.geometry["finSpan"])
+      if self.geometry["finSpan"] == 0:
+        self.geometry["finLESweep"] = 0
+      else:
+        self.geometry["finLESweep"] = math.atan(self.geometry["finSweepLength"]/self.geometry["finSpan"])
 
       self.geometry["finMidChord"] = math.sqrt(self.geometry["finSpan"]**2\
         + math.pow(self.geometry["finSweepLength"] + self.geometry["finTipChord"]/2 - self.geometry["finRootChord"]/2, 2))
@@ -194,11 +197,19 @@ class Rocket:
             * (self.geometry["boattail_length"]/3)*(1+(1-d/d_b)/(1-math.pow(d/d_b, 2)))
 
       # fins
-      c_na_f = (1 + r/(s+r)) * (4*n*math.pow(s/d, 2))/(1+math.sqrt(1+math.pow((2*l_m)/(c_r+c_t), 2)))
-      x_ac_f = x_f + (l_m/3)*(c_r+2*c_t)/(c_r+c_t) + (1/6)*((c_r+c_t) - (c_r*c_t)/(c_r+c_t))
+      if (l_m == 0) or (c_r == 0) or (s == 0):
+        c_na_f = 0
+        x_ac_f = 0
+      else:
+        c_na_f = (1 + r/(s+r)) * (4*n*math.pow(s/d, 2))/(1+math.sqrt(1+math.pow((2*l_m)/(c_r+c_t), 2)))
+        x_ac_f = x_f + (l_m/3)*(c_r+2*c_t)/(c_r+c_t) + (1/6)*((c_r+c_t) - (c_r*c_t)/(c_r+c_t))
 
       c_na_r = c_na_f + c_na_n + c_na_c
 
       self.centerPressure = (c_na_n*x_ac_n + c_na_f*x_ac_f + c_na_c*x_ac_c)/c_na_r
-
       self.staticStability = (self.centerPressure - self.centerGravity) / self.geometry["body_diameter"]
+      
+      # "error" checking
+      for key in self.lengthKeys:
+        if (self.geometry[key] < 0):
+          self.staticStability = np.NINF

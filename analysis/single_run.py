@@ -6,7 +6,7 @@ sys.path.append('.')
 from thermofluids import Atmosphere
 from components import Rocket, Motor
 from trajectory import TwoDTrajectorySolver
-from aerodynamics import DragModel
+from aerodynamics import DragModel, calculateBarrowmanCP
 from plotting import plotCurvesWithMax
 from sensitivity_analysis import sensitivity_analysis_apogee
 
@@ -24,7 +24,7 @@ launchrailLength = 8.0 #m
 # x, vx, y, vy
 y0 = [0., 0., 0.1, 0.]
 
-rocketFilePath = "2019_rocket_genetic.csv"
+rocketFilePath = "2019_rocket_metric.csv"
 myRocket = Rocket(rocketFilePath)
 
 motorFilePath = "Cesaroni_N5800.eng"
@@ -51,3 +51,12 @@ plt.xlim(0, solver.apogee_time + 5)
 plt.ylim(0, solver.maxMach + 0.1)
 plt.legend()
 plt.show()
+
+zt = myRocket.geometry['nose_length'] + myRocket.geometry['body_length'] - myRocket.geometry['finRootChord']
+cp = calculateBarrowmanCP(
+    myRocket.geometry['nose_length'], myRocket.geometry['body_length'], myRocket.geometry['boattail_length'],
+    myRocket.geometry['body_diameter'], myRocket.geometry['boattail_diameter'],
+    zt, myRocket.geometry['finSpan'], myRocket.geometry['finTipChord'], myRocket.geometry['finRootChord'],
+    myRocket.geometry['finSweepLength'], myRocket.geometry['finMidChord'], 4, mach=0.3)
+
+print((cp - myRocket.centerGravity) / myRocket.geometry['body_diameter'])

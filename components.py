@@ -140,13 +140,13 @@ class Rocket:
       #  / ((1 + self.geometry["taper"]) * self.geometry["finRootChord"])
       
       #self.geometry["finArea"] = self.geometry["finSpan"]**2 / self.geometry["finAspectRatio"]
-	  
+    
       self.geometry["totalLength"] = self.geometry["nose_length"]\
         + self.geometry["boattail_length"] + self.geometry["body_length"]
 
       if "finConnection" not in self.geometry:
         self.geometry["finConnection"] = self.geometry["nose_length"] + self.geometry["body_length"] - self.geometry["finRootChord"]
-	  
+    
       if self.geometry["finSpan"] == 0:
         self.geometry["finLESweep"] = 0
       else:
@@ -155,10 +155,10 @@ class Rocket:
       self.geometry["finMidChord"] = math.sqrt(self.geometry["finSpan"]**2\
         + math.pow(self.geometry["finSweepLength"] + self.geometry["finTipChord"]/2 - self.geometry["finRootChord"]/2, 2))
 
-      self.centerGravity = 0.65 * self.geometry["totalLength"] # just for now
+      self.centerGravity = 0.625 * self.geometry["totalLength"] # just for now. i got this from openrocket
 
       self.calculateStaticStability()
-	  
+    
     def calculateStaticStability(self):
       # c_na_b = 2 # per radian
       # x_ac_b = 0.63 * self.geometry["nose_length"]

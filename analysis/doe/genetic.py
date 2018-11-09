@@ -12,6 +12,7 @@ import numpy as np
 import math
 from sklearn import linear_model
 import itertools
+import os
 
 from deap import algorithms
 from deap import base
@@ -19,7 +20,7 @@ from deap import creator
 from deap import tools
 
 import matplotlib.pyplot as plt
-import networkx
+from mpl_toolkits.mplot3d import Axes3D
 
 # Creating RSM ###########################
 
@@ -114,16 +115,22 @@ class DesirabilityFunction:
                 return math.pow((self.U-y)/(self.U-self.T), self.w)
             elif y>self.U:
                 return 0
-
+    def back_eval(self, d):
+        if self.mode == 'maximize':
+            return (math.pow(d, 1/self.w) * (self.T-self.L)) + self.L
+        elif self.mode == 'minimize':
+            return self.U - (math.pow(d, 1/self.w) * (self.U-self.T))
+        elif self.mode == 'range':
+            y = (math.pow(d, 1/self.w) * (self.T-self.L)) + self.L
+            if y>=self.L and y<=self.T:
+                return y
+            else:
+                return self.U - (math.pow(d, 1/self.w) * (self.U-self.T))
 
 d_apogee = DesirabilityFunction(9100, 1, lowerLimit=0, upperLimit=9500)
-d_stability = DesirabilityFunction(2.5, 1, lowerLimit=-5, upperLimit=5)
+d_stability = DesirabilityFunction(2.5, 1, lowerLimit=0)
          
 ##########################################
-
-creator.create("FitnessMulti", base.Fitness, weights=(1.0, 1.2))
-creator.create("Individual", np.ndarray, fitness=creator.FitnessMulti)
-
 def func(ind):
     x_regression = getRegressionXs(ind)
     x_regression = np.array(x_regression).reshape(1, -1)
@@ -136,16 +143,22 @@ def func(ind):
         x_stab.append(x*20/39.37)
 
     # rocket = Rocket(rocketFilePath)
-    myRocket.geometry['finRootChord'] = x_stab[0]
-    myRocket.geometry['finTipChord'] = x_stab[1]
-    myRocket.geometry['finSpan'] = x_stab[2]
+    myRocket.geometry['finRootChord']   = x_stab[0]
+    myRocket.geometry['finTipChord']    = x_stab[1]
+    myRocket.geometry['finSpan']        = x_stab[2]
     myRocket.geometry['finSweepLength'] = x_stab[3]
     myRocket.updateGeometry()
     currentStability = myRocket.staticStability
 
     # print("ind: {} apogee: {} stability: {}".format(ind, currentApogee, currentStability))
     
-    return (d_apogee.eval(currentApogee), d_stability.eval(currentStability))
+    d1 = d_stability.eval(currentStability)
+    d2 = d_apogee.eval(currentApogee)
+    d3 = math.pow((d1 * d2**2), (1./3.))
+    
+    return (d1, d2)
+    # return (d1, d2, d3)
+    # return (d3,)
 
 def feasible(ind):
     """Feasability function for the individual. Returns True if feasible False
@@ -168,6 +181,10 @@ IND_SIZE=4
 NDIM = 2
 BOUND_LOW, BOUND_UP = 0.0, 1.0
 
+creator.create("FitnessMulti", base.Fitness, weights=(1.0, 1.0))
+# creator.create("FitnessMulti", base.Fitness, weights=(1.0,))
+creator.create("Individual", np.ndarray, fitness=creator.FitnessMulti)
+
 toolbox = base.Toolbox()
 
 toolbox.register("attr_float", random.uniform, BOUND_LOW, BOUND_UP)
@@ -187,8 +204,8 @@ stats.register("pop", copy.deepcopy)
 # toolbox.decorate("mate", history.decorator)
 # toolbox.decorate("mutate", history.decorator)
 
-toolbox.pop_size = 100
-toolbox.max_gen = 1000
+toolbox.pop_size = 50
+toolbox.max_gen = 500
 toolbox.mut_prob = 0.2
 
 def run_ea(toolbox, stats=None, verbose=False):
@@ -198,11 +215,11 @@ def run_ea(toolbox, stats=None, verbose=False):
 
     if stats != None:
         stats.register("avg", np.mean, axis=0)
-        # stats.register("std", np.std, axis=0)
-        # stats.register("min", np.min, axis=0)
-         #stats.register("max", np.max, axis=0)
+        stats.register("std", np.std, axis=0)
+        stats.register("min", np.min, axis=0)
+        stats.register("max", np.max, axis=0)
         
-    return algorithms.eaMuPlusLambda(pop, toolbox, mu=toolbox.pop_size, 
+    results, logbook =  algorithms.eaMuPlusLambda(pop, toolbox, mu=toolbox.pop_size, 
                                      lambda_=toolbox.pop_size, 
                                      cxpb=1-toolbox.mut_prob,
                                      mutpb=toolbox.mut_prob, 
@@ -210,6 +227,8 @@ def run_ea(toolbox, stats=None, verbose=False):
                                      ngen=toolbox.max_gen, 
                                      verbose=verbose,
                                      halloffame=hof)
+                                     
+    return results, logbook, hof
 
 def main():
     # random.seed(10)
@@ -217,30 +236,40 @@ def main():
     # ind1.fitness.values = func(ind1)
     # print(ind1)
 
-    random.seed(21)
+    # random.seed(21)
 
-    results, logbook = run_ea(toolbox, stats=stats, verbose=True)
+    results, logbook, hof = run_ea(toolbox, stats=stats, verbose=False)
 
-    par = []
-    d1_list = []
-    d2_list = []
-
+    label_list = ["stability", "apogee"]
+    desirability_list = []
+    feasible_list = []
+    count = np.linspace(1, len(logbook), len(logbook))    
+    firstLoop = True
+    
     for gen in logbook:
-        ind = gen['avg']
-        
-        d1, d2 = func(ind)
-        d1_list.append(d1)
-        d2_list.append(d2)
+        ind = gen['max']
+        feasible_list.append(feasible(ind))
+        ds = func(ind)
+        if firstLoop:
+            firstLoop = False
+            for i in range(len(ds)):
+                desirability_list.append([])
+        for (list, d) in zip(desirability_list, ds):
+        # for (list, d) in itertools.izip(desirability_list, ds):
+            list.append(d)
 
-        if feasible(ind):
-            par.append(ind)
-
-    count = np.linspace(1, len(logbook), len(logbook))
-
-    plt.plot(count, d1_list, label="apogee")
-    plt.plot(count, d2_list, label="stability")
+    for (d, l) in zip(desirability_list, label_list):
+    # for (d, l) in itertools.izip(desirability_list, label_list):
+        plt.plot(count, d, label=l)
+    # plt.plot(count, feasible_list)
+    plt.legend()
     plt.show()
-
+    
+    plt.scatter(desirability_list[0], desirability_list[1])
+    plt.title('apogee vs stability (desirability) of Generations')
+    plt.xlabel('stability');plt.ylabel('apogee')
+    plt.show()
+    
     # Is not meaningful when the number of generations is so high
     # graph = networkx.DiGraph(history.genealogy_tree)
     # graph = graph.reverse()     # Make the grah top-down
@@ -248,7 +277,61 @@ def main():
     # networkx.draw(graph, node_color=colors)
     # plt.show()
     
-    print(logbook[-1]['avg'])
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+    
+    # for ind in results:
+        # d = func(ind)
+        # if feasible(ind):
+            # ax.scatter(d[0], d[1], math.pow(d[0]*d[1], 0.5))
+    # ax.set_title('apogee vs stability (desirability) of Final Population')
+    # ax.set_xlabel('stability');ax.set_xlim(1, 0)
+    # ax.set_ylabel('apogee');ax.set_ylim(0, 1)
+    # ax.set_zlim(0, 1)
+    # plt.show()
+    
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+    
+    # for ind in results:
+        # d = func(ind)
+        # if feasible(ind):
+            # plt.scatter(d[0], d[1])
+    # plt.title('apogee vs stability (desirability) of Final Population')
+    # plt.xlabel('stability');plt.ylabel('apogee')
+    # # plt.xlim(0, 1);plt.ylim(0, 1)
+    # plt.show()
+    
+    y_apogee = []
+    y_stability = []
+    
+    fronts = tools.emo.sortLogNondominated(results, len(results), first_front_only=True)
+    for ind in fronts:
+        d = func(ind)
+        if feasible(ind):
+            y_stability.append(d_stability.back_eval(d[0]))
+            y_apogee.append(d_apogee.back_eval(d[1]))
+            plt.scatter(d[0], d[1])
+    plt.title('apogee vs stability (desirability) of Front')
+    plt.xlabel('stability');plt.ylabel('apogee')
+    # plt.xlim(0, 1);plt.ylim(0, 1)
+    plt.show()
+    
+    plt.scatter(y_stability, y_apogee)
+    plt.title("apogee [m] vs stability")
+    plt.show()
+    
+    with open(os.path.join('analysis', 'doe', 'genetics_results.txt'), 'w') as output:
+        # for (ind, a, s) in itertools.izip(fronts, y_apogee, y_stability):
+        for (ind, a, s) in zip(fronts, y_apogee, y_stability):
+            output.write("Ind: {} Apogee: {} Stability: {}".format(ind*20, a, s))
+            output.write("\n")
+    
+    return 1
+
+    # print(hof)
+    
+    # print(logbook[-1]['avg'])
 
 if __name__ == "__main__":
     main()

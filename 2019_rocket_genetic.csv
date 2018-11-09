@@ -10,9 +10,9 @@ motorless_mass,18
 motor_diameter,3.9
 nFins,4
 finThickness,0.1
-finRootChord,6.655182
-finTipChord,2.6573402
-finSpan,6.655182
-finSweepLength,8.396096
+finRootChord,10.50049206
+finTipChord,10.24162366
+finSpan,10.49603404
+finSweepLength,19.99999764
 finLESweep,50
 finLETotal,10

@@ -2,6 +2,7 @@ from __future__ import division
 from components import Motor
 import math
 from enum import Enum
+import numpy as np
 
 class DragModel(Enum):
     TacticleMissileDesign = 1
@@ -114,7 +115,10 @@ class CoefficientsBox:
         * (2.7*(nose_length/body_diameter) + 4*(body_length/body_diameter) + 2*(1-boattail_diameter/body_diameter)*(boattail_length/body_diameter))\
         * c_f_box
 
-        c_do_base_box = 0.029 * math.pow(body_diameter/boattail_diameter, 3) / math.sqrt(c_do_body_box)
+        if boattail_diameter == 0:
+            c_do_base_box = 0.029 / math.sqrt(c_do_body_box)
+        else:
+            c_do_base_box = 0.029 * math.pow(body_diameter/boattail_diameter, 3) / math.sqrt(c_do_body_box)
 
         # this is actually the correlation from Tactical Missile Design
         if (mach >= 1):
@@ -184,7 +188,6 @@ def getDragCoefficient(rocket, isPowered, atmosphere, mach, dragModel, constantD
         results['body_friction'] = c_d_all[1]
         results['body_wave'] = c_d_all[2]
         results['body_base'] = c_d_all[3]
-
     elif dragModel == DragModel.Constant:
         results['all'] = constantDrag
     elif dragModel == DragModel.CoefficientsBox:
@@ -220,3 +223,72 @@ def getDragCoefficient(rocket, isPowered, atmosphere, mach, dragModel, constantD
         results['fin_wave'] = c_do_fin_wave
 
     return results
+
+
+def calculateBarrowmanCP(
+    nose_length, body_length, boattail_length,
+    body_diameter, boattail_diameter,
+    fin_connection_length, fin_span, fin_tip_chord, fin_root_chord, fin_sweep_length,
+    fin_mid_chord, number_of_fins, mach=0):
+  
+    c_n_list = []
+    x_cp_list = []
+    rr = body_diameter / 2 # reference diameter
+
+    # Nose Cone
+    c_na_n = 2
+    x_cp_n = (0.466) * nose_length
+    
+    c_n_list.append(c_na_n)
+    x_cp_list.append(x_cp_n)
+    #################################
+
+    # Transition elements (boat tail)
+    r1 = body_diameter / 2     # upstream diameter
+    r2 = boattail_diameter / 2 # downstream diameter
+    c_na_bt = 2 * (math.pow(r2/rr, 2) - math.pow(r1/rr, 2))
+    x_cp_bt = nose_length + body_length + (boattail_length/3) * (1 + (r2/r1)*((r2/r1) + 1))
+    
+    c_n_list.append(c_na_bt)
+    x_cp_list.append(x_cp_bt)
+    #################################
+
+    # Cylindrical body contributes little normal force
+    # IT is neglected in these calculations
+
+    # Fins
+    cr = fin_root_chord
+    ct = fin_tip_chord
+    s = fin_span
+    zt = fin_connection_length
+    xt = fin_mid_chord
+    gamma = math.atan((ct/2 + fin_sweep_length - cr/2)/s)
+
+    AR = (2*s)/(cr + ct)
+    c_na_1 = (AR * (cr+ct)/rr * (s/rr)) / (2 + math.sqrt(4 + math.pow(AR/math.cos(gamma), 2)))
+    c_na_f = number_of_fins * c_na_1
+    tau = (s+rr/2)/(rr/2)
+    k_t = 1 + 1/tau
+    c_na_f_interference = k_t * c_na_f
+    x_cp_f = zt + (xt/3)*(cr+2*ct)/(cr+ct) + (1/6)*((cr+ct) - (cr*ct)/(cr+ct))
+
+    c_n_list.append(c_na_f_interference)
+    x_cp_list.append(x_cp_f)
+    #################################
+
+    # Total
+    for i in range(len(c_n_list)):
+        c_n_list[i] = compressibilityCorrection(c_n_list[i], mach)
+
+
+    # c_n_fins is different from the value calucated in open rocket
+    # try to get them to match
+    # every other c_n is exactly the same. openrocket does not apply compressibility correction
+    # however the effect is very minor at M=0.3
+    print(c_n_list)
+    print(x_cp_list)
+
+    c_na = np.sum(c_n_list)
+    x_cp = np.dot(c_n_list, x_cp_list) / c_na
+    
+    return x_cp
